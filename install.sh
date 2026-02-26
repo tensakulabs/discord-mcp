@@ -3,7 +3,13 @@ set -euo pipefail
 
 REPO="tensakulabs/discord-mcp"
 BIN_NAME="discord-mcp"
-INSTALL_DIR="/usr/local/bin"
+
+# Prefer ~/bin (no sudo), fall back to /usr/local/bin
+if [ -d "$HOME/bin" ] || mkdir -p "$HOME/bin" 2>/dev/null; then
+  INSTALL_DIR="$HOME/bin"
+else
+  INSTALL_DIR="/usr/local/bin"
+fi
 
 # --- Detect platform ---
 OS="$(uname -s)"
@@ -42,11 +48,13 @@ curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMP_FILE"
 chmod +x "$TMP_FILE"
 
 # --- Install ---
-if [ -w "$INSTALL_DIR" ]; then
-  mv "$TMP_FILE" "${INSTALL_DIR}/${BIN_NAME}"
-else
-  echo "Installing to ${INSTALL_DIR} (may require sudo)..."
-  sudo mv "$TMP_FILE" "${INSTALL_DIR}/${BIN_NAME}"
+mv "$TMP_FILE" "${INSTALL_DIR}/${BIN_NAME}"
+
+# Add ~/bin to PATH hint if needed
+if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+  echo ""
+  echo "⚠ Add ~/bin to your PATH if discord-mcp isn't found:"
+  echo "  echo 'export PATH=\"\$HOME/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
 fi
 
 echo ""
