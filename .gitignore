@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.js.map
+.DS_Store
+discord-mcp-cli
+discord-mcp-mac-*
+discord-mcp-linux-*
+~/.config/discord-mcp/
