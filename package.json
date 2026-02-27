@@ -30,6 +30,10 @@
   "optionalDependencies": {
     "keytar": "^7.9.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tensakulabs/discord-mcp"
+  },
   "publishConfig": {
     "access": "public"
   },
