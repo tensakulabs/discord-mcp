@@ -48,11 +48,9 @@ Step 1: Extract your Discord token
     await saveToken(token);
     console.log("✅ Token saved securely to OS keychain (or encrypted file fallback).");
 
-    // Auto-patch claude_desktop_config.json
+    // Auto-patch Claude Code settings.json
     const configPaths = [
-      join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"),  // macOS
-      join(homedir(), ".config", "Claude", "claude_desktop_config.json"),                          // Linux
-      join(process.env["APPDATA"] ?? "", "Claude", "claude_desktop_config.json"),                 // Windows
+      join(homedir(), ".claude", "settings.json"),  // Claude Code (all platforms)
     ];
 
     const configPath = configPaths.find(existsSync);
@@ -107,12 +105,12 @@ Step 1: Extract your Discord token
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
       console.log(`✅ Registered in Claude config: ${configPath}`);
-      console.log("\n🎉 Done! Restart Claude to start using Discord tools.");
+      console.log("\n🎉 Done! Restart Claude Code to start using Discord tools.");
     } else {
       console.log(`
-⚠️  Could not find Claude desktop config automatically.
+⚠️  Could not find Claude Code config automatically.
 
-Add this to your claude_desktop_config.json manually:
+Add this to your ~/.claude/settings.json manually:
 
   "mcpServers": {
     "discord": {

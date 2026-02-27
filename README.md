@@ -36,7 +36,7 @@ Open Discord desktop app → Press **Ctrl+Shift+I** (or **Cmd+Option+I** on Mac)
 
 ### 3. Restart Claude
 
-Restart Claude desktop app. You'll see Discord tools available.
+Restart Claude Code. You'll see Discord tools available.
 
 ### Verify it's working
 
@@ -47,7 +47,7 @@ npx @tensakulabs/discord-mcp status
 
 ## Manual MCP config (if auto-config fails)
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add to `~/.claude/settings.json`:
 
 ```json
 {
