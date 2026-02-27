@@ -39,7 +39,7 @@ async function connect(resume = false): Promise<void> {
 
     switch (payload.op) {
       case 10: // HELLO
-        startHeartbeat(payload.d.heartbeat_interval);
+        startHeartbeat(payload.d.heartbeat_interval as number);
         if (resume && sessionId) {
           send({ op: 6, d: { token, session_id: sessionId, seq: sequence } }); // RESUME
         } else {
@@ -101,7 +101,7 @@ function handleEvent(type: string, data: Record<string, unknown>): void {
       break;
 
     case "MESSAGE_CREATE": {
-      const msg = data as DiscordMessage;
+      const msg = data as unknown as DiscordMessage;
       if (msg.author?.bot) break; // ignore bots
 
       const isMention = Array.isArray(msg.mentions) &&
