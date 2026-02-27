@@ -31,16 +31,17 @@ export function initDb(): Database.Database {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
-      id          TEXT PRIMARY KEY,
-      channel_id  TEXT NOT NULL,
-      guild_id    TEXT,
-      author_id   TEXT NOT NULL,
-      author_name TEXT NOT NULL,
-      content     TEXT NOT NULL,
-      timestamp   INTEGER NOT NULL,  -- unix ms
-      is_dm       INTEGER NOT NULL DEFAULT 0,
-      is_mention  INTEGER NOT NULL DEFAULT 0,
-      seen        INTEGER NOT NULL DEFAULT 0
+      id           TEXT PRIMARY KEY,
+      channel_id   TEXT NOT NULL,
+      guild_id     TEXT,
+      author_id    TEXT NOT NULL,
+      author_name  TEXT NOT NULL,
+      content      TEXT NOT NULL,
+      timestamp    INTEGER NOT NULL,  -- unix ms
+      is_dm        INTEGER NOT NULL DEFAULT 0,
+      is_mention   INTEGER NOT NULL DEFAULT 0,
+      mention_type TEXT DEFAULT NULL, -- "direct" | "everyone" | "here" | null
+      seen         INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_channel_ts ON messages(channel_id, timestamp DESC);
@@ -59,9 +60,17 @@ export function initDb(): Database.Database {
     END;
   `);
 
+  // Migration: add mention_type column if not present (existing installs)
+  const cols = (db.pragma("table_info(messages)") as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes("mention_type")) {
+    db.exec("ALTER TABLE messages ADD COLUMN mention_type TEXT DEFAULT NULL");
+  }
+
   _db = db;
   return db;
 }
+
+export type MentionType = "direct" | "everyone" | "here" | null;
 
 export interface DbMessage {
   id: string;
@@ -73,15 +82,16 @@ export interface DbMessage {
   timestamp: number;
   is_dm: number;
   is_mention: number;
+  mention_type: MentionType;
   seen: number;
 }
 
 export function insertMessage(db: Database.Database, msg: Omit<DbMessage, "seen">): void {
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO messages
-      (id, channel_id, guild_id, author_id, author_name, content, timestamp, is_dm, is_mention, seen)
+      (id, channel_id, guild_id, author_id, author_name, content, timestamp, is_dm, is_mention, mention_type, seen)
     VALUES
-      (@id, @channel_id, @guild_id, @author_id, @author_name, @content, @timestamp, @is_dm, @is_mention, 0)
+      (@id, @channel_id, @guild_id, @author_id, @author_name, @content, @timestamp, @is_dm, @is_mention, @mention_type, 0)
   `);
   stmt.run(msg);
 }

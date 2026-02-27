@@ -8,6 +8,8 @@ import { WebSocket } from "ws";
 import { getToken } from "./auth.js";
 import { initDb, insertMessage } from "./db.js";
 import { schedulePurge } from "./purge.js";
+import { loadConfig } from "./config.js";
+import { fireHooks } from "./hooks.js";
 
 const GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json";
 const IDENTIFY_INTENTS = (1 << 0) | (1 << 9) | (1 << 12); // GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT
@@ -18,6 +20,7 @@ let sequence: number | null = null;
 let sessionId: string | null = null;
 let resumeGatewayUrl: string | null = null;
 let reconnectDelay = 1000;
+let selfId: string | null = null; // set from READY event
 
 const db = initDb();
 schedulePurge();
@@ -97,27 +100,53 @@ function handleEvent(type: string, data: Record<string, unknown>): void {
     case "READY":
       sessionId = data.session_id as string;
       resumeGatewayUrl = data.resume_gateway_url as string;
-      console.error(`[discord-mcp daemon] Ready.`);
+      selfId = (data.user as { id: string } | undefined)?.id ?? null;
+      console.error(`[discord-mcp daemon] Ready. (selfId: ${selfId})`);
       break;
 
     case "MESSAGE_CREATE": {
       const msg = data as unknown as DiscordMessage;
       if (msg.author?.bot) break; // ignore bots
 
-      const isMention = Array.isArray(msg.mentions) &&
-        msg.mentions.some((u: { id: string }) => u.id === (data.self_id as string ?? ""));
+      // Detect mention type
+      const isDirect = selfId !== null && Array.isArray(msg.mentions) &&
+        msg.mentions.some((u: { id: string }) => u.id === selfId);
+      const isEveryone = msg.mention_everyone === true &&
+        msg.content.includes("@everyone");
+      const isHere = msg.mention_everyone === true &&
+        msg.content.includes("@here");
+
+      const mentionType = isDirect ? "direct"
+        : isEveryone ? "everyone"
+        : isHere ? "here"
+        : null;
 
       insertMessage(db, {
-        id:          msg.id,
-        channel_id:  msg.channel_id,
-        guild_id:    msg.guild_id ?? null,
-        author_id:   msg.author.id,
-        author_name: msg.author.username,
-        content:     msg.content,
-        timestamp:   new Date(msg.timestamp).getTime(),
-        is_dm:       msg.guild_id ? 0 : 1,
-        is_mention:  isMention ? 1 : 0,
+        id:           msg.id,
+        channel_id:   msg.channel_id,
+        guild_id:     msg.guild_id ?? null,
+        author_id:    msg.author.id,
+        author_name:  msg.author.username,
+        content:      msg.content,
+        timestamp:    new Date(msg.timestamp).getTime(),
+        is_dm:        msg.guild_id ? 0 : 1,
+        is_mention:   mentionType !== null ? 1 : 0,
+        mention_type: mentionType,
       });
+
+      // Fire hooks
+      const cfg = loadConfig();
+      const ctx = {
+        author:  msg.author.username,
+        content: msg.content,
+        channel: msg.channel_id,
+        guild:   msg.guild_id ?? "dm",
+        is_dm:   !msg.guild_id,
+      };
+      if (isDirect)   fireHooks(cfg.hooks.on_mention, ctx);
+      if (isEveryone) fireHooks(cfg.hooks.on_everyone, ctx);
+      if (isHere)     fireHooks(cfg.hooks.on_here, ctx);
+      fireHooks(cfg.hooks.on_message, ctx);
       break;
     }
   }
@@ -164,6 +193,7 @@ interface DiscordMessage {
   content: string;
   timestamp: string;
   mentions: Array<{ id: string }>;
+  mention_everyone: boolean;
 }
 
 // Start
