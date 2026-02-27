@@ -159,4 +159,9 @@ program
     }
   });
 
+// Default: no subcommand → run MCP server
+program.action(async () => {
+  await import("./index.js");
+});
+
 program.parse();
