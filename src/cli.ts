@@ -5,7 +5,7 @@ import { saveToken, getToken } from "./auth.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import { homedir, platform } from "os";
-import { join, resolve } from "path";
+import { join, resolve, dirname } from "path";
 
 const program = new Command();
 
@@ -59,6 +59,7 @@ Step 1: Extract your Discord token
       const launchAgentsDir = join(homedir(), "Library", "LaunchAgents");
       const plistPath = join(launchAgentsDir, "com.discord-mcp.daemon.plist");
       const npxPath = (() => { try { return execSync("which npx").toString().trim(); } catch { return "/usr/local/bin/npx"; } })();
+      const nodeBinDir = (() => { try { return dirname(execSync("which node").toString().trim()); } catch { return "/usr/local/bin"; } })();
       const logDir = join(homedir(), ".config", "discord-mcp");
 
       const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -73,6 +74,11 @@ Step 1: Extract your Discord token
     <string>@tensakulabs/discord-mcp</string>
     <string>daemon-start</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${nodeBinDir}:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
