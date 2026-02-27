@@ -27,12 +27,11 @@ Step 1: Extract your Discord token
 
   1. Open Discord desktop app
   2. Press Ctrl+Shift+I (or Cmd+Option+I on Mac) to open DevTools
-  3. Click the "Console" tab
-  4. Paste this one-liner and press Enter:
-
-  window.webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m.find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()
-
-  5. Copy the returned string (no quotes needed)
+  3. Click the "Network" tab
+  4. Switch to any server or channel to trigger a request
+  5. Click any request to discord.com/api/...
+  6. Scroll to "Request Headers" → find the "authorization" header
+  7. Copy the value (starts with MT or OD — no quotes needed)
 
 `);
 
@@ -73,7 +72,7 @@ Step 1: Extract your Discord token
   <key>ProgramArguments</key>
   <array>
     <string>${npxPath}</string>
-    <string>discord-mcp</string>
+    <string>@tensakulabs/discord-mcp</string>
     <string>daemon-start</string>
   </array>
   <key>RunAtLoad</key>
@@ -104,7 +103,7 @@ Step 1: Extract your Discord token
       config.mcpServers ??= {};
       config.mcpServers["discord"] = {
         command: "npx",
-        args: ["-y", "discord-mcp"],
+        args: ["-y", "@tensakulabs/discord-mcp"],
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
       console.log(`✅ Registered in Claude config: ${configPath}`);
@@ -118,7 +117,7 @@ Add this to your claude_desktop_config.json manually:
   "mcpServers": {
     "discord": {
       "command": "npx",
-      "args": ["-y", "discord-mcp"]
+      "args": ["-y", "@tensakulabs/discord-mcp"]
     }
   }
 `);
@@ -151,7 +150,7 @@ program
         process.exit(1);
       }
     } catch {
-      console.error("❌ No token found. Run: npx discord-mcp setup");
+      console.error("❌ No token found. Run: npx @tensakulabs/discord-mcp setup");
       process.exit(1);
     }
   });
