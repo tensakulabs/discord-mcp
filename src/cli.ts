@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("discord-mcp")
   .description("Discord selfbot MCP server for Claude")
-  .version("0.1.0");
+  .version("0.1.5");
 
 program
   .command("setup")
@@ -107,7 +107,7 @@ Step 1: Extract your Discord token
       config.mcpServers ??= {};
       config.mcpServers["discord"] = {
         command: "npx",
-        args: ["-y", "@tensakulabs/discord-mcp"],
+        args: ["-y", "@tensakulabs/discord-mcp", "mcp"],
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
       console.log(`✅ Registered in Claude config: ${configPath}`);
@@ -121,11 +121,18 @@ Add this to your ~/.claude/settings.json manually:
   "mcpServers": {
     "discord": {
       "command": "npx",
-      "args": ["-y", "@tensakulabs/discord-mcp"]
+      "args": ["-y", "@tensakulabs/discord-mcp", "mcp"]
     }
   }
 `);
     }
+  });
+
+program
+  .command("mcp")
+  .description("Start the MCP server (stdio transport — used by Claude Code)")
+  .action(async () => {
+    await import("./index.js");
   });
 
 program
