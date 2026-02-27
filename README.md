@@ -22,7 +22,7 @@ Exposes 6 Discord tools via MCP (Model Context Protocol):
 ### 1. Install & configure
 
 ```bash
-npx discord-mcp setup
+npx @tensakulabs/discord-mcp setup
 ```
 
 This will:
@@ -32,13 +32,7 @@ This will:
 
 ### 2. Token extraction (step shown during setup)
 
-Open Discord desktop app → DevTools console → paste:
-
-```javascript
-window.webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m.find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()
-```
-
-Copy the returned string.
+Open Discord desktop app → Press **Ctrl+Shift+I** (or **Cmd+Option+I** on Mac) → **Network** tab → Send any message in Discord → filter requests by `messages` → click any request → **Headers** tab → find the `Authorization` header → copy its value.
 
 ### 3. Restart Claude
 
@@ -47,7 +41,7 @@ Restart Claude desktop app. You'll see Discord tools available.
 ### Verify it's working
 
 ```bash
-npx discord-mcp status
+npx @tensakulabs/discord-mcp status
 # ✅ Connected as: yourname#0
 ```
 
@@ -60,7 +54,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "discord": {
       "command": "npx",
-      "args": ["-y", "discord-mcp"]
+      "args": ["-y", "@tensakulabs/discord-mcp"]
     }
   }
 }
@@ -89,7 +83,7 @@ Add to OpenClaw's MCP config:
       "name": "discord",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "discord-mcp"]
+      "args": ["-y", "@tensakulabs/discord-mcp"]
     }]
   }
 }
