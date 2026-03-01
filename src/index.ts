@@ -13,6 +13,8 @@ import { sendMessage } from "./tools/send_message.js";
 import { getUnread } from "./tools/get_unread.js";
 import { searchDiscord } from "./tools/search.js";
 
+const ACCOUNT = process.env.DISCORD_MCP_ACCOUNT ?? "default";
+
 const server = new Server(
   { name: "discord-mcp", version: "0.2.0" },
   { capabilities: { tools: {} } }
@@ -116,27 +118,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: unknown;
     switch (name) {
       case "discord_list_guilds":
-        result = await listGuilds(); break;
+        result = await listGuilds(ACCOUNT); break;
       case "discord_list_channels":
-        result = await listChannels((args as { guildId: string }).guildId); break;
+        result = await listChannels((args as { guildId: string }).guildId, ACCOUNT); break;
       case "discord_get_messages": {
         const a = args as { channelId: string; limit?: number; since?: string; until?: string };
-        result = await getMessages(a.channelId, a.limit, a.since, a.until); break;
+        result = await getMessages(a.channelId, a.limit, a.since, a.until, ACCOUNT); break;
       }
       case "discord_get_dms":
-        result = await getDMChannels(); break;
+        result = await getDMChannels(ACCOUNT); break;
       case "discord_send_message":
         result = await sendMessage(args as {
           channelId?: string; userId?: string;
           content: string; replyToMessageId?: string;
-        }); break;
+        }, ACCOUNT); break;
       case "discord_get_unread":
         result = await getUnread(
-          (args as { channels: Array<{ guildName: string; channelName: string; channelId: string }> }).channels
+          (args as { channels: Array<{ guildName: string; channelName: string; channelId: string }> }).channels,
+          ACCOUNT
         ); break;
       case "discord_search": {
         const a = args as { query: string; channelId?: string; since?: string; until?: string; limit?: number };
-        result = await searchDiscord(a.query, a.channelId, a.since, a.until, a.limit); break;
+        result = await searchDiscord(a.query, a.channelId, a.since, a.until, a.limit, ACCOUNT); break;
       }
       default:
         throw new Error(`Unknown tool: ${name}`);

@@ -5,9 +5,10 @@ export async function searchDiscord(
   channelId?: string,
   since?: string,
   until?: string,
-  limit = 50
+  limit = 50,
+  account = "default"
 ) {
-  const db = getDb();
+  const db = getDb(account);
   if (!db) {
     throw new Error("Daemon not running — no local message history to search. Start discord-mcp daemon first.");
   }

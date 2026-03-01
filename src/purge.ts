@@ -1,11 +1,11 @@
 import { getDb, deleteOlderThan } from "./db.js";
 import { loadConfig } from "./config.js";
 
-export function runPurge(): void {
-  const db = getDb();
+export function runPurge(account = "default"): void {
+  const db = getDb(account);
   if (!db) return;
 
-  const config = loadConfig();
+  const config = loadConfig(account);
   const now = Date.now();
 
   const guildCutoff = now - config.retention.guild_channels * 24 * 60 * 60 * 1000;
@@ -24,7 +24,7 @@ export function runPurge(): void {
   console.error(`[discord-mcp] Purge complete.`);
 }
 
-export function schedulePurge(): void {
+export function schedulePurge(account = "default"): void {
   // Run at next 2am, then every 24h
   const now = new Date();
   const next2am = new Date(now);
@@ -33,7 +33,7 @@ export function schedulePurge(): void {
 
   const msUntil2am = next2am.getTime() - now.getTime();
   setTimeout(() => {
-    runPurge();
-    setInterval(runPurge, 24 * 60 * 60 * 1000);
+    runPurge(account);
+    setInterval(() => runPurge(account), 24 * 60 * 60 * 1000);
   }, msUntil2am);
 }

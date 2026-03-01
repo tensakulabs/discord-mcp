@@ -8,17 +8,18 @@ export async function getMessages(
   channelId: string,
   limit = 25,
   since?: string,   // ISO date string e.g. "2026-02-25" or "2026-02-25T00:00:00Z"
-  until?: string
+  until?: string,
+  account = "default"
 ) {
   const sinceMs = since ? new Date(since).getTime() : undefined;
   const untilMs = until ? new Date(until).getTime() : undefined;
 
   // ISC-D4: SQLite-first
-  const db = getDb();
+  const db = getDb(account);
   if (db) {
     const rows = queryMessages(db, channelId, limit, sinceMs, untilMs);
     if (rows.length > 0) {
-      if (rows.length > 0) markSeen(channelId, rows[0].timestamp);
+      if (rows.length > 0) markSeen(channelId, rows[0].timestamp, account);
       return rows.map(r => ({
         id: r.id,
         author: r.author_name,
@@ -29,13 +30,13 @@ export async function getMessages(
   }
 
   // ISC-D4: REST fallback on miss
-  const config = loadConfig();
+  const config = loadConfig(account);
   if (!config.retention.fallback_to_api) {
     return []; // privacy mode — no REST fallback
   }
 
-  const token = await getToken();
-  let url = `https://discord.com/api/v10/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`;
+  const token = await getToken(account);
+  const url = `https://discord.com/api/v10/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`;
   const res = await rateLimitedFetch(url, { headers: makeDiscordHeaders(token) });
   if (!res.ok) throw new Error(`Discord API error: ${res.status}`);
 
@@ -48,7 +49,7 @@ export async function getMessages(
 
   if (messages.length > 0) {
     const latestTs = new Date(messages[0].timestamp).getTime();
-    markSeen(channelId, latestTs);
+    markSeen(channelId, latestTs, account);
   }
 
   return messages.map(m => ({

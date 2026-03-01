@@ -4,28 +4,37 @@ import { homedir } from "os";
 import { join } from "path";
 
 const CONFIG_DIR = join(homedir(), ".config", "discord-mcp");
-const DB_FILE = join(CONFIG_DIR, "messages.db");
 
-let _db: Database.Database | null = null;
+function dbFilePath(account: string): string {
+  return account === "default"
+    ? join(CONFIG_DIR, "messages.db")
+    : join(CONFIG_DIR, account, "messages.db");
+}
 
-export function getDb(): Database.Database | null {
-  if (_db) return _db;
-  if (!existsSync(DB_FILE)) return null; // ISC-A5: graceful miss
+const _dbs: Record<string, Database.Database> = {};
+
+export function getDb(account = "default"): Database.Database | null {
+  if (_dbs[account]) return _dbs[account];
+  const dbFile = dbFilePath(account);
+  if (!existsSync(dbFile)) return null; // ISC-A5: graceful miss
 
   try {
-    _db = new Database(DB_FILE);
+    const db = new Database(dbFile);
     // ISC-A4: WAL mode prevents corruption on crash
-    _db.pragma("journal_mode = WAL");
-    _db.pragma("synchronous = NORMAL");
-    return _db;
+    db.pragma("journal_mode = WAL");
+    db.pragma("synchronous = NORMAL");
+    _dbs[account] = db;
+    return db;
   } catch {
     return null;
   }
 }
 
-export function initDb(): Database.Database {
+export function initDb(account = "default"): Database.Database {
+  const dbFile = dbFilePath(account);
   mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  const db = new Database(DB_FILE);
+  if (account !== "default") mkdirSync(join(CONFIG_DIR, account), { recursive: true, mode: 0o700 });
+  const db = new Database(dbFile);
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
 
@@ -66,7 +75,7 @@ export function initDb(): Database.Database {
     db.exec("ALTER TABLE messages ADD COLUMN mention_type TEXT DEFAULT NULL");
   }
 
-  _db = db;
+  _dbs[account] = db;
   return db;
 }
 

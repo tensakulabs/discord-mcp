@@ -1,8 +1,8 @@
 import { getToken } from "../auth.js";
 import { makeDiscordHeaders, rateLimitedFetch } from "../ratelimit.js";
 
-export async function getDMChannels() {
-  const token = await getToken();
+export async function getDMChannels(account = "default") {
+  const token = await getToken(account);
   const res = await rateLimitedFetch(
     "https://discord.com/api/v10/users/@me/channels",
     { headers: makeDiscordHeaders(token) }

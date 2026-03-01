@@ -8,8 +8,8 @@ interface SendOptions {
   replyToMessageId?: string;
 }
 
-export async function sendMessage(opts: SendOptions) {
-  const token = await getToken();
+export async function sendMessage(opts: SendOptions, account = "default") {
+  const token = await getToken(account);
 
   let targetChannelId = opts.channelId;
 

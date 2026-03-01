@@ -3,7 +3,12 @@ import { homedir } from "os";
 import { join } from "path";
 
 const CONFIG_DIR = join(homedir(), ".config", "discord-mcp");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+
+function configFilePath(account: string): string {
+  return account === "default"
+    ? join(CONFIG_DIR, "config.json")
+    : join(CONFIG_DIR, account, "config.json");
+}
 
 export interface Hook {
   type: "command" | "http";
@@ -42,10 +47,11 @@ const DEFAULTS: Config = {
   },
 };
 
-export function loadConfig(): Config {
-  if (!existsSync(CONFIG_FILE)) return DEFAULTS;
+export function loadConfig(account = "default"): Config {
+  const configFile = configFilePath(account);
+  if (!existsSync(configFile)) return DEFAULTS;
   try {
-    const raw = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as Partial<Config>;
+    const raw = JSON.parse(readFileSync(configFile, "utf8")) as Partial<Config>;
     return {
       retention: { ...DEFAULTS.retention, ...(raw.retention ?? {}) },
       hooks: {
@@ -60,9 +66,11 @@ export function loadConfig(): Config {
   }
 }
 
-export function writeDefaultConfig(): void {
+export function writeDefaultConfig(account = "default"): void {
+  const configFile = configFilePath(account);
   mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  if (!existsSync(CONFIG_FILE)) {
-    writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULTS, null, 2));
+  if (account !== "default") mkdirSync(join(CONFIG_DIR, account), { recursive: true, mode: 0o700 });
+  if (!existsSync(configFile)) {
+    writeFileSync(configFile, JSON.stringify(DEFAULTS, null, 2));
   }
 }

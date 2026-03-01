@@ -13,6 +13,7 @@ import { fireHooks } from "./hooks.js";
 
 const GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json";
 const IDENTIFY_INTENTS = (1 << 0) | (1 << 9) | (1 << 12); // GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT
+const ACCOUNT = process.env.DISCORD_MCP_ACCOUNT ?? "default";
 
 let ws: WebSocket | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -22,11 +23,11 @@ let resumeGatewayUrl: string | null = null;
 let reconnectDelay = 1000;
 let selfId: string | null = null; // set from READY event
 
-const db = initDb();
-schedulePurge();
+const db = initDb(ACCOUNT);
+schedulePurge(ACCOUNT);
 
 async function connect(resume = false): Promise<void> {
-  const token = await getToken();
+  const token = await getToken(ACCOUNT);
   const url = resume && resumeGatewayUrl ? resumeGatewayUrl : GATEWAY_URL;
 
   ws = new WebSocket(url);
@@ -135,7 +136,7 @@ function handleEvent(type: string, data: Record<string, unknown>): void {
       });
 
       // Fire hooks
-      const cfg = loadConfig();
+      const cfg = loadConfig(ACCOUNT);
       const ctx = {
         author:  msg.author.username,
         content: msg.content,

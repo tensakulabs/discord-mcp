@@ -1,8 +1,8 @@
 import { getToken } from "../auth.js";
 import { makeDiscordHeaders, rateLimitedFetch } from "../ratelimit.js";
 
-export async function listChannels(guildId: string) {
-  const token = await getToken();
+export async function listChannels(guildId: string, account = "default") {
+  const token = await getToken(account);
   const res = await rateLimitedFetch(
     `https://discord.com/api/v10/guilds/${guildId}/channels`,
     { headers: makeDiscordHeaders(token) }

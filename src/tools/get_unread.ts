@@ -10,9 +10,9 @@ interface MonitoredChannel {
   channelId: string;
 }
 
-export async function getUnread(channels: MonitoredChannel[]) {
+export async function getUnread(channels: MonitoredChannel[], account = "default") {
   // ISC-D4: SQLite-first path
-  const db = getDb();
+  const db = getDb(account);
   if (db) {
     const unreadRows = queryUnread(db);
     if (unreadRows.length > 0) {
@@ -43,14 +43,14 @@ export async function getUnread(channels: MonitoredChannel[]) {
   }
 
   // REST fallback (daemon not running or no unread in SQLite)
-  const config = loadConfig();
+  const config = loadConfig(account);
   if (!config.retention.fallback_to_api) return [];
 
-  const token = await getToken();
+  const token = await getToken(account);
   const results = [];
 
   for (const ch of channels) {
-    const lastSeen = getLastSeen(ch.channelId);
+    const lastSeen = getLastSeen(ch.channelId, account);
     const res = await rateLimitedFetch(
       `https://discord.com/api/v10/channels/${ch.channelId}/messages?limit=25`,
       { headers: makeDiscordHeaders(token) }
@@ -68,7 +68,7 @@ export async function getUnread(channels: MonitoredChannel[]) {
       .reverse();
 
     if (unread.length > 0) {
-      markSeen(ch.channelId, new Date(messages[0].timestamp).getTime());
+      markSeen(ch.channelId, new Date(messages[0].timestamp).getTime(), account);
       results.push({
         guild: ch.guildName,
         channel: ch.channelName,

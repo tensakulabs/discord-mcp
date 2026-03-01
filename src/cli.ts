@@ -5,22 +5,26 @@ import { saveToken, getToken } from "./auth.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import { homedir, platform } from "os";
-import { join, resolve, dirname } from "path";
+import { join, dirname } from "path";
 
 const program = new Command();
 
 program
   .name("discord-mcp")
   .description("Discord selfbot MCP server for Claude")
-  .version("0.1.5");
+  .version("0.1.6");
 
 program
   .command("setup")
   .description("Configure Discord token and register MCP server")
-  .action(async () => {
+  .option("--account <name>", "Account name (e.g. work, personal)", "default")
+  .action(async (opts: { account: string }) => {
+    const account = opts.account;
+    const accountLabel = account === "default" ? "" : ` [${account}]`;
+
     console.log(`
 ╔══════════════════════════════════════════════════╗
-║         discord-mcp setup                       ║
+║         discord-mcp setup${accountLabel.padEnd(22)}║
 ╚══════════════════════════════════════════════════╝
 
 Step 1: Extract your Discord token
@@ -36,8 +40,8 @@ Step 1: Extract your Discord token
 `);
 
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const token = await new Promise<string>(resolve => {
-      rl.question("Paste your Discord token: ", ans => { rl.close(); resolve(ans.trim()); });
+    const token = await new Promise<string>(res => {
+      rl.question("Paste your Discord token: ", ans => { rl.close(); res(ans.trim()); });
     });
 
     if (!token || token.length < 20) {
@@ -45,34 +49,36 @@ Step 1: Extract your Discord token
       process.exit(1);
     }
 
-    await saveToken(token);
+    await saveToken(token, account);
     console.log("✅ Token saved securely to OS keychain (or encrypted file fallback).");
 
-    // Auto-patch Claude Code settings.json
-    const configPaths = [
-      join(homedir(), ".claude", "settings.json"),  // Claude Code (all platforms)
-    ];
+    // MCP key and daemon label — namespaced for non-default accounts
+    const mcpKey = account === "default" ? "discord" : `discord-${account}`;
+    const daemonLabel = account === "default" ? "com.discord-mcp.daemon" : `com.discord-mcp.daemon.${account}`;
+    const accountArgs = account === "default" ? [] : ["--account", account];
 
-    const configPath = configPaths.find(existsSync);
-    // Write launchd plist (macOS only) — ISC-D6
+    // Write launchd plist (macOS only)
     if (platform() === "darwin") {
       const launchAgentsDir = join(homedir(), "Library", "LaunchAgents");
-      const plistPath = join(launchAgentsDir, "com.discord-mcp.daemon.plist");
+      const plistPath = join(launchAgentsDir, `${daemonLabel}.plist`);
       const npxPath = (() => { try { return execSync("which npx").toString().trim(); } catch { return "/usr/local/bin/npx"; } })();
       const nodeBinDir = (() => { try { return dirname(execSync("which node").toString().trim()); } catch { return "/usr/local/bin"; } })();
-      const logDir = join(homedir(), ".config", "discord-mcp");
+      const logDir = account === "default"
+        ? join(homedir(), ".config", "discord-mcp")
+        : join(homedir(), ".config", "discord-mcp", account);
+
+      const daemonCmdArgs = [npxPath, "@tensakulabs/discord-mcp", "daemon-start", ...accountArgs];
+      const plistArgs = daemonCmdArgs.map(a => `    <string>${a}</string>`).join("\n");
 
       const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.discord-mcp.daemon</string>
+  <string>${daemonLabel}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${npxPath}</string>
-    <string>@tensakulabs/discord-mcp</string>
-    <string>daemon-start</string>
+${plistArgs}
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -91,37 +97,42 @@ Step 1: Extract your Discord token
 </plist>`;
 
       mkdirSync(launchAgentsDir, { recursive: true });
+      mkdirSync(logDir, { recursive: true, mode: 0o700 });
       writeFileSync(plistPath, plist);
       try {
         execSync(`launchctl unload "${plistPath}" 2>/dev/null; launchctl load "${plistPath}"`);
-        console.log(`✅ Daemon registered: com.discord-mcp.daemon (starts at login, running now)`);
+        console.log(`✅ Daemon registered: ${daemonLabel} (starts at login, running now)`);
       } catch {
         console.log(`✅ Plist written: ${plistPath} (run: launchctl load "${plistPath}")`);
       }
     }
+
+    // Auto-patch Claude Code settings.json
+    const configPath = [join(homedir(), ".claude", "settings.json")].find(existsSync);
 
     if (configPath) {
       const config = JSON.parse(readFileSync(configPath, "utf8")) as {
         mcpServers?: Record<string, unknown>;
       };
       config.mcpServers ??= {};
-      config.mcpServers["discord"] = {
+      config.mcpServers[mcpKey] = {
         command: "npx",
-        args: ["-y", "@tensakulabs/discord-mcp", "mcp"],
+        args: ["-y", "@tensakulabs/discord-mcp", "mcp", ...accountArgs],
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2));
-      console.log(`✅ Registered in Claude config: ${configPath}`);
+      console.log(`✅ Registered in Claude config as "${mcpKey}": ${configPath}`);
       console.log("\n🎉 Done! Restart Claude Code to start using Discord tools.");
     } else {
+      const extraArgs = accountArgs.length ? `, ${accountArgs.map(a => `"${a}"`).join(", ")}` : "";
       console.log(`
 ⚠️  Could not find Claude Code config automatically.
 
 Add this to your ~/.claude/settings.json manually:
 
   "mcpServers": {
-    "discord": {
+    "${mcpKey}": {
       "command": "npx",
-      "args": ["-y", "@tensakulabs/discord-mcp", "mcp"]
+      "args": ["-y", "@tensakulabs/discord-mcp", "mcp"${extraArgs}]
     }
   }
 `);
@@ -131,38 +142,66 @@ Add this to your ~/.claude/settings.json manually:
 program
   .command("mcp")
   .description("Start the MCP server (stdio transport — used by Claude Code)")
-  .action(async () => {
+  .option("--account <name>", "Account name", "default")
+  .action(async (opts: { account: string }) => {
+    process.env.DISCORD_MCP_ACCOUNT = opts.account;
     await import("./index.js");
   });
 
 program
   .command("daemon-start")
   .description("Start the daemon (called by launchd — not intended for direct use)")
-  .action(async () => {
-    // Dynamically import daemon to start it
+  .option("--account <name>", "Account name", "default")
+  .action(async (opts: { account: string }) => {
+    process.env.DISCORD_MCP_ACCOUNT = opts.account;
     await import("./daemon.js");
   });
 
 program
   .command("status")
   .description("Check if token is set and valid")
-  .action(async () => {
+  .option("--account <name>", "Account name", "default")
+  .action(async (opts: { account: string }) => {
     try {
-      const token = await getToken();
-      // Validate token with a lightweight API call
+      const token = await getToken(opts.account);
       const res = await fetch("https://discord.com/api/v10/users/@me", {
         headers: { Authorization: token },
       });
       if (res.ok) {
         const user = await res.json() as { username: string; discriminator: string };
-        console.log(`✅ Connected as: ${user.username}#${user.discriminator}`);
+        const label = opts.account === "default" ? "" : ` [${opts.account}]`;
+        console.log(`✅ Connected as${label}: ${user.username}#${user.discriminator}`);
       } else {
         console.error(`❌ Token invalid: HTTP ${res.status}`);
         process.exit(1);
       }
     } catch {
-      console.error("❌ No token found. Run: npx @tensakulabs/discord-mcp setup");
+      const flag = opts.account === "default" ? "" : ` --account ${opts.account}`;
+      console.error(`❌ No token found. Run: npx @tensakulabs/discord-mcp setup${flag}`);
       process.exit(1);
+    }
+  });
+
+program
+  .command("list-accounts")
+  .description("List all configured Discord accounts")
+  .action(() => {
+    const configPath = join(homedir(), ".claude", "settings.json");
+    if (!existsSync(configPath)) { console.log("No Claude config found."); return; }
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      mcpServers?: Record<string, { args?: string[] }>;
+    };
+    const servers = Object.entries(config.mcpServers ?? {})
+      .filter(([k]) => k === "discord" || k.startsWith("discord-"));
+    if (servers.length === 0) {
+      console.log("No Discord accounts configured. Run: npx @tensakulabs/discord-mcp setup");
+      return;
+    }
+    console.log("Configured Discord accounts:");
+    for (const [key, val] of servers) {
+      const idx = val.args?.indexOf("--account") ?? -1;
+      const name = idx >= 0 && val.args ? (val.args[idx + 1] ?? "default") : "default";
+      console.log(`  ${key} → account: ${name}`);
     }
   });
 
