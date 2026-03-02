@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("discord-mcp")
   .description("Discord selfbot MCP server for Claude")
-  .version("0.1.8");
+  .version("0.1.9");
 
 program
   .command("setup")

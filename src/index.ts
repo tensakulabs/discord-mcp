@@ -17,7 +17,8 @@ import { resolveDmUser } from "./tools/resolve_dm_user.js";
 const ACCOUNT = process.env.DISCORD_MCP_ACCOUNT ?? "default";
 
 // Each account gets its own MCP server name → unique tool namespace in Claude Code.
-const SERVER_NAME = ACCOUNT === "default" ? "discord" : `discord-${ACCOUNT}`;
+// Override with DISCORD_MCP_NAME env var to decouple the public namespace from the local account name.
+const SERVER_NAME = process.env.DISCORD_MCP_NAME ?? (ACCOUNT === "default" ? "discord" : `discord-${ACCOUNT}`);
 
 const server = new Server(
   { name: SERVER_NAME, version: "0.1.8" },
