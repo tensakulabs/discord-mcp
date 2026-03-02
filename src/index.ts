@@ -12,11 +12,15 @@ import { getDMChannels } from "./tools/get_dms.js";
 import { sendMessage } from "./tools/send_message.js";
 import { getUnread } from "./tools/get_unread.js";
 import { searchDiscord } from "./tools/search.js";
+import { resolveDmUser } from "./tools/resolve_dm_user.js";
 
 const ACCOUNT = process.env.DISCORD_MCP_ACCOUNT ?? "default";
 
+// Each account gets its own MCP server name → unique tool namespace in Claude Code.
+const SERVER_NAME = ACCOUNT === "default" ? "discord" : `discord-${ACCOUNT}`;
+
 const server = new Server(
-  { name: "discord-mcp", version: "0.2.0" },
+  { name: SERVER_NAME, version: "0.1.8" },
   { capabilities: { tools: {} } }
 );
 
@@ -56,6 +60,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "discord_get_dms",
       description: "List the user's open DM conversations.",
       inputSchema: { type: "object", properties: {}, required: [] },
+    },
+    {
+      name: "discord_resolve_dm_user",
+      description: "Resolve a username or display name to a DM channel ID. Use this before discord_get_messages when you know who to DM but not the channel ID.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          username: { type: "string", description: "Display name or username to look up (case-insensitive, partial match supported)" },
+        },
+        required: ["username"],
+      },
     },
     {
       name: "discord_send_message",
@@ -127,6 +142,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case "discord_get_dms":
         result = await getDMChannels(ACCOUNT); break;
+      case "discord_resolve_dm_user":
+        result = await resolveDmUser((args as { username: string }).username, ACCOUNT); break;
       case "discord_send_message":
         result = await sendMessage(args as {
           channelId?: string; userId?: string;
@@ -146,8 +163,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+    const detail = err instanceof Error ? err.message : String(err);
+    const isTokenMissing = detail.includes("No Discord token found");
+    const errorPayload = {
+      error_code: isTokenMissing ? "TOKEN_MISSING" : "TOOL_ERROR",
+      account: ACCOUNT,
+      remedy: isTokenMissing
+        ? `Run: npx @tensakulabs/discord-mcp setup${ACCOUNT !== "default" ? ` --account ${ACCOUNT}` : ""}`
+        : "Check daemon status: npx @tensakulabs/discord-mcp status",
+      detail,
+    };
+    return {
+      content: [{ type: "text", text: JSON.stringify(errorPayload, null, 2) }],
+      isError: true,
+    };
   }
 });
 

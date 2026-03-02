@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { createInterface } from "readline";
 import { saveToken, getToken } from "./auth.js";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, rmSync } from "fs";
 import { execSync } from "child_process";
 import { homedir, platform } from "os";
 import { join, dirname } from "path";
@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("discord-mcp")
   .description("Discord selfbot MCP server for Claude")
-  .version("0.1.6");
+  .version("0.1.8");
 
 program
   .command("setup")
@@ -180,6 +180,148 @@ program
       console.error(`❌ No token found. Run: npx @tensakulabs/discord-mcp setup${flag}`);
       process.exit(1);
     }
+  });
+
+program
+  .command("migrate-account")
+  .description("Migrate the default account to a named account")
+  .requiredOption("--to <name>", "New account name (e.g. personal, work)")
+  .option("--cleanup", "Delete original default files after migration", false)
+  .action(async (opts: { to: string; cleanup: boolean }) => {
+    const to = opts.to.trim();
+    if (!to || to === "default") {
+      console.error("❌ Invalid account name. Choose a name other than 'default'.");
+      process.exit(1);
+    }
+
+    const CONFIG_DIR = join(homedir(), ".config", "discord-mcp");
+    const targetDir = join(CONFIG_DIR, to);
+
+    // ISC-A1: Guard — target must not already exist
+    if (existsSync(targetDir)) {
+      console.error(`❌ Account '${to}' already exists at ${targetDir}. Aborting.`);
+      process.exit(1);
+    }
+
+    // ISC-A2: Guard — default token must exist
+    let token: string;
+    try {
+      token = await getToken("default");
+    } catch {
+      console.error("❌ No token found for default account. Nothing to migrate.");
+      process.exit(1);
+    }
+
+    console.log(`\nMigrating default → ${to}...\n`);
+
+    // 1. Copy token to new keychain slot
+    await saveToken(token, to);
+    console.log(`✅ Token copied to keychain slot: user-token-${to}`);
+
+    // 2. Copy data files
+    mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+    const filesToCopy = ["messages.db", "config.json", "state.json"];
+    for (const file of filesToCopy) {
+      const src = join(CONFIG_DIR, file);
+      const dst = join(targetDir, file);
+      if (existsSync(src)) {
+        copyFileSync(src, dst);
+        console.log(`✅ Copied ${file} → ${to}/${file}`);
+      }
+    }
+
+    // 3. Update settings.json MCP registration
+    const claudeConfigPath = join(homedir(), ".claude", "settings.json");
+    if (existsSync(claudeConfigPath)) {
+      const config = JSON.parse(readFileSync(claudeConfigPath, "utf8")) as {
+        mcpServers?: Record<string, unknown>;
+      };
+      config.mcpServers ??= {};
+      if (config.mcpServers["discord"]) {
+        config.mcpServers[`discord-${to}`] = {
+          command: "npx",
+          args: ["-y", "@tensakulabs/discord-mcp", "mcp", "--account", to],
+        };
+        delete config.mcpServers["discord"];
+        writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2));
+        console.log(`✅ Claude config: renamed MCP key "discord" → "discord-${to}"`);
+      }
+    }
+
+    // 4. Re-register launchd daemon (macOS)
+    if (platform() === "darwin") {
+      const launchAgentsDir = join(homedir(), "Library", "LaunchAgents");
+      const oldPlistPath = join(launchAgentsDir, "com.discord-mcp.daemon.plist");
+      const newLabel = `com.discord-mcp.daemon.${to}`;
+      const newPlistPath = join(launchAgentsDir, `${newLabel}.plist`);
+
+      if (existsSync(oldPlistPath)) {
+        try { execSync(`launchctl unload "${oldPlistPath}" 2>/dev/null`); } catch { /* ok */ }
+
+        const npxPath = (() => { try { return execSync("which npx").toString().trim(); } catch { return "/usr/local/bin/npx"; } })();
+        const nodeBinDir = (() => { try { return dirname(execSync("which node").toString().trim()); } catch { return "/usr/local/bin"; } })();
+        const logDir = join(homedir(), ".config", "discord-mcp", to);
+
+        const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${newLabel}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${npxPath}</string>
+    <string>@tensakulabs/discord-mcp</string>
+    <string>daemon-start</string>
+    <string>--account</string>
+    <string>${to}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${nodeBinDir}:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${logDir}/daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>${logDir}/daemon.log</string>
+</dict>
+</plist>`;
+
+        writeFileSync(newPlistPath, plist);
+        try {
+          execSync(`launchctl load "${newPlistPath}"`);
+          console.log(`✅ Daemon re-registered: ${newLabel} (running now)`);
+        } catch {
+          console.log(`✅ Plist written: ${newPlistPath} (run: launchctl load "${newPlistPath}")`);
+        }
+
+        if (opts.cleanup) {
+          rmSync(oldPlistPath, { force: true });
+          console.log(`🗑  Removed old plist: com.discord-mcp.daemon.plist`);
+        }
+      }
+    }
+
+    // 5. Cleanup original default files if requested
+    if (opts.cleanup) {
+      for (const file of filesToCopy) {
+        const src = join(CONFIG_DIR, file);
+        if (existsSync(src)) {
+          rmSync(src, { force: true });
+          console.log(`🗑  Removed original: ${file}`);
+        }
+      }
+      console.log("\n✅ Cleanup complete. Default account data removed.");
+    } else {
+      console.log("\nℹ️  Original default files preserved. Run with --cleanup to remove them.");
+    }
+
+    console.log(`\n🎉 Migration complete! Restart Claude Code to use "discord-${to}" MCP.`);
   });
 
 program

@@ -1,6 +1,6 @@
 {
   "name": "@tensakulabs/discord-mcp",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "description": "Discord selfbot MCP server — read & send messages via Claude",
   "license": "MIT",
   "type": "module",
